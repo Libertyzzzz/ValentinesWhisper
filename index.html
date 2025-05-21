@@ -1,0 +1,562 @@
+<script type="text/javascript">
+    var gk_isXlsx = false;
+    var gk_xlsxFileLookup = {};
+    var gk_fileData = {};
+    function filledCell(cell) {
+        return cell !== '' && cell != null;
+    }
+    function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                    row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                    headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+    }
+</script><!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To Yuri</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(135deg, #1d1d1f, #2c2c2e);
+            overflow: hidden;
+            cursor: default;
+            font-family: -apple-system, BlinkMacSystemFont, 'San Francisco', 'Helvetica Neue', Arial, sans-serif;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+<canvas id="loveCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('loveCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // 爱心轨迹粒子
+    class HeartParticle {
+        constructor(x, y, size, speedX, speedY) {
+            this.x = x;
+            this.y = y;
+            this.size = size;
+            this.speedX = speedX;
+            this.speedY = speedY;
+            this.opacity = 1;
+            this.color = `hsl(340, 80%, ${60 + Math.random() * 20}%)`;
+            this.angle = Math.random() * Math.PI * 2;
+            this.orbitRadius = 70 + Math.random() * 130;
+        }
+
+        draw() {
+            ctx.globalAlpha = this.opacity;
+            const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+            gradient.addColorStop(0, '#ff99cc');
+            gradient.addColorStop(1, this.color);
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.bezierCurveTo(this.x - this.size / 2, this.y - this.size / 2, this.x - this.size, this.y + this.size / 2, this.x, this.y + this.size);
+            ctx.bezierCurveTo(this.x + this.size, this.y + this.size / 2, this.x + this.size / 2, this.y - this.size / 2, this.x, this.y);
+            ctx.fill();
+            ctx.globalAlpha = this.opacity * 0.25;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ff69b4';
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        update() {
+            this.angle += 0.015;
+            this.x = canvas.width / 2 + Math.cos(this.angle) * this.orbitRadius * (1 + Math.sin(this.angle * 2) * 0.15);
+            this.y = canvas.height / 2 + Math.sin(this.angle) * this.orbitRadius * (1 + Math.cos(this.angle * 2) * 0.15);
+            this.opacity -= 0.002;
+            if (this.opacity <= 0) {
+                this.reset();
+            }
+        }
+
+        reset() {
+            this.angle = Math.random() * Math.PI * 2;
+            this.orbitRadius = 70 + Math.random() * 130;
+            this.opacity = 1;
+            this.size = 10 + Math.random() * 15;
+        }
+    }
+
+    // 闪烁粒子
+    class SparkParticle {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.size = Math.random() * 4 + 1;
+            this.speedX = (Math.random() - 0.5) * 6;
+            this.speedY = (Math.random() - 0.5) * 6;
+            this.life = 1;
+            this.color = `rgba(255, 182, 193, ${this.life})`;
+        }
+
+        draw() {
+            ctx.globalAlpha = this.life;
+            const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.size);
+            gradient.addColorStop(0, '#ff99cc');
+            gradient.addColorStop(1, 'rgba(255, 182, 193, 0.6)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = this.life * 0.3;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#ff69b4';
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        update() {
+            this.x += this.speedX;
+            this.y += this.speedY;
+            this.life -= 0.012;
+            if (this.life <= 0) {
+                this.reset();
+            }
+        }
+
+        reset() {
+            this.x = canvas.width / 2;
+            this.y = canvas.height / 2;
+            this.speedX = (Math.random() - 0.5) * 6;
+            this.speedY = (Math.random() - 0.5) * 6;
+            this.life = 1;
+        }
+    }
+
+    // 流光线条
+    class GlowLine {
+        constructor() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.length = 100 + Math.random() * 150;
+            this.speed = 1 + Math.random() * 1.5;
+            this.angle = Math.random() * Math.PI * 2;
+            this.opacity = 1;
+            this.thickness = 1.5 + Math.random() * 1;
+        }
+
+        draw() {
+            ctx.globalAlpha = this.opacity;
+            const gradient = ctx.createLinearGradient(
+                this.x, this.y,
+                this.x + Math.cos(this.angle) * this.length,
+                this.y + Math.sin(this.angle) * this.length
+            );
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+            gradient.addColorStop(0.4, 'rgba(255, 182, 193, 0.9)');
+            gradient.addColorStop(0.6, 'rgba(255, 99, 180, 0.9)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = this.thickness;
+            ctx.beginPath();
+            ctx.moveTo(this.x, this.y);
+            ctx.lineTo(
+                this.x + Math.cos(this.angle) * this.length,
+                this.y + Math.sin(this.angle) * this.length
+            );
+            ctx.stroke();
+            ctx.globalAlpha = this.opacity * 0.25;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#ff69b4';
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        update() {
+            this.x += Math.cos(this.angle) * this.speed;
+            this.y += Math.sin(this.angle) * this.speed;
+            this.opacity -= 0.0025;
+            if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height || this.opacity <= 0) {
+                this.reset();
+            }
+        }
+
+        reset() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.length = 100 + Math.random() * 150;
+            this.speed = 1 + Math.random() * 1.5;
+            this.angle = Math.random() * Math.PI * 2;
+            this.opacity = 1;
+            this.thickness = 1.5 + Math.random() * 1;
+        }
+    }
+
+    // 心形轨迹动画
+    class HeartTrail {
+        constructor() {
+            this.points = [];
+            this.maxPoints = 200;
+            this.angle = 0;
+            this.radius = 70;
+            this.scale = 1;
+        }
+
+        update() {
+            this.angle += 0.02;
+            this.scale = 1 + Math.sin(this.angle * 0.3) * 0.15;
+            const x = canvas.width / 2 + this.radius * this.scale * (16 * Math.sin(this.angle) ** 3);
+            const y = canvas.height / 2 - this.radius * this.scale * (13 * Math.cos(this.angle) - 5 * Math.cos(2 * this.angle) - 2 * Math.cos(3 * this.angle) - Math.cos(4 * this.angle));
+            this.points.push({ x, y });
+            if (this.points.length > this.maxPoints) {
+                this.points.shift();
+            }
+        }
+
+        draw() {
+            ctx.globalAlpha = 0.95;
+            const gradient = ctx.createLinearGradient(
+                canvas.width / 2, canvas.height / 2,
+                this.points[this.points.length - 1]?.x || canvas.width / 2,
+                this.points[this.points.length - 1]?.y || canvas.height / 2
+            );
+            gradient.addColorStop(0, '#ff69b4');
+            gradient.addColorStop(1, '#ff99cc');
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            this.points.forEach((point, index) => {
+                if (index === 0) {
+                    ctx.moveTo(point.x, point.y);
+                } else {
+                    ctx.lineTo(point.x, point.y);
+                }
+            });
+            ctx.stroke();
+            ctx.globalAlpha = 0.3;
+            ctx.shadowBlur = 25;
+            ctx.shadowColor = '#ff69b4';
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    // 文字粒子化效果（“Happy Valentine's Day!”新增光晕和浮动，“Yuri”为跳跃小人）
+    class TextParticle {
+        constructor(x, y, targetX, targetY, char, isYuri = false) {
+            this.x = x;
+            this.y = y;
+            this.targetX = targetX;
+            this.targetY = targetY;
+            this.char = char;
+            this.speed = 0.2;
+            this.opacity = 0;
+            this.scale = 1;
+            this.scaleSpeed = 0.02;
+            this.isYuri = isYuri;
+            this.time = 0;
+            this.scrollSpeed = -2; // 水平滚动速度
+            this.jumpSpeed = 0.05; // 跳跃动画速度
+            this.jumpHeight = 30; // 跳跃高度
+            this.legAngle = 0; // 腿部动画角度
+            this.armAngle = 0; // 手臂动画角度
+            this.floatOffset = 0; // 浮动偏移量
+        }
+
+        draw() {
+            ctx.globalAlpha = this.opacity;
+            const gradient = ctx.createLinearGradient(this.targetX - 50, this.targetY, this.targetX + 50, this.targetY);
+            if (this.isYuri) {
+                gradient.addColorStop(0, '#ff99cc');
+                gradient.addColorStop(0.5, '#ff69b4');
+                gradient.addColorStop(1, '#ff5e78');
+            } else {
+                gradient.addColorStop(0, '#ff69b4');
+                gradient.addColorStop(0.5, '#ff99cc');
+                gradient.addColorStop(1, '#ff69b4');
+            }
+            ctx.fillStyle = gradient;
+            ctx.save();
+            ctx.translate(this.x, this.y);
+
+            if (this.isYuri) {
+                // 绘制跳跃小人
+                const headSize = 20;
+                const bodyHeight = 30;
+                const legLength = 20;
+                const armLength = 15;
+
+                // 头部
+                ctx.beginPath();
+                ctx.arc(0, -headSize / 2, headSize / 2, 0, Math.PI * 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ff69b4';
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // 身体
+                ctx.beginPath();
+                ctx.moveTo(0, headSize / 2);
+                ctx.lineTo(0, headSize / 2 + bodyHeight);
+                ctx.lineWidth = 5;
+                ctx.strokeStyle = gradient;
+                ctx.stroke();
+
+                // 腿部动画
+                this.legAngle += 0.1;
+                const legAngle = Math.sin(this.legAngle) * 0.5;
+                ctx.beginPath();
+                ctx.moveTo(0, headSize / 2 + bodyHeight);
+                ctx.lineTo(-10, headSize / 2 + bodyHeight + legLength * Math.cos(legAngle));
+                ctx.moveTo(0, headSize / 2 + bodyHeight);
+                ctx.lineTo(10, headSize / 2 + bodyHeight + legLength * Math.cos(legAngle + Math.PI));
+                ctx.stroke();
+
+                // 手臂动画
+                this.armAngle += 0.15;
+                const armAngle = Math.sin(this.armAngle) * 0.7;
+                ctx.beginPath();
+                ctx.moveTo(0, headSize / 2 + bodyHeight / 2);
+                ctx.lineTo(-15, headSize / 2 + bodyHeight / 2 - armLength * Math.cos(armAngle));
+                ctx.moveTo(0, headSize / 2 + bodyHeight / 2);
+                ctx.lineTo(15, headSize / 2 + bodyHeight / 2 + armLength * Math.cos(armAngle));
+                ctx.stroke();
+
+                // 字母
+                ctx.font = `bold ${40 * this.scale}px -apple-system, BlinkMacSystemFont, "San Francisco"`;
+                ctx.textAlign = 'center';
+                ctx.fillText(this.char, 0, -headSize - 5);
+            } else {
+                // 绘制“Happy Valentine's Day!” with glow and float
+                ctx.font = `italic 48px "Dancing Script", cursive`; // Handwritten font style
+                ctx.textAlign = 'center';
+                this.floatOffset = Math.sin(this.time * 0.5) * 5; // Floating effect
+                ctx.scale(this.scale, this.scale);
+                ctx.fillText(this.char, 0, this.floatOffset);
+                ctx.globalAlpha = this.opacity * 0.3;
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = '#ff69b4';
+                ctx.fillText(this.char, 0, this.floatOffset);
+                ctx.shadowBlur = 0;
+            }
+
+            ctx.restore();
+        }
+
+        update() {
+            const dx = this.targetX - this.x;
+            const dy = this.targetY - this.y;
+            this.x += dx * this.speed;
+            this.y += dy * this.speed;
+            this.opacity = Math.min(this.opacity + 0.04, 1);
+
+            if (this.isYuri) {
+                // 水平滚动
+                this.targetX += this.scrollSpeed;
+                this.x += this.scrollSpeed;
+                if (this.targetX < -50) {
+                    this.targetX += canvas.width + 150;
+                    this.x = this.targetX;
+                }
+                // 跳跃动画
+                this.time += this.jumpSpeed;
+                this.y = this.targetY - Math.abs(Math.sin(this.time)) * this.jumpHeight;
+            } else {
+                // 浮动和缩放动画
+                this.time += this.scaleSpeed;
+                this.scale = 1 + Math.sin(this.time) * 0.1;
+            }
+        }
+    }
+
+    const hearts = [];
+    const sparks = [];
+    const glowLines = [];
+    const heartTrail = new HeartTrail();
+    let textParticles = [];
+    let textShown = false;
+
+    // 初始化粒子
+    for (let i = 0; i < 30; i++) {
+        hearts.push(new HeartParticle(
+            canvas.width / 2,
+            canvas.height / 2,
+            10 + Math.random() * 15,
+            (Math.random() - 0.5) * 2,
+            (Math.random() - 0.5) * 2
+        ));
+    }
+    for (let i = 0; i < 70; i++) {
+        sparks.push(new SparkParticle(canvas.width / 2, canvas.height / 2));
+    }
+    for (let i = 0; i < 20; i++) {
+        glowLines.push(new GlowLine());
+    }
+
+    // 初始化文字粒子（点击时触发）
+    function initTextParticles() {
+        // "Happy Valentine's Day!" at the top, slightly below
+        const text1 = "Happy Valentine's Day!";
+        const startX1 = canvas.width / 2 - (text1.length * 30) / 2; // Adjust spacing for handwritten style
+        const startY1 = 100;
+
+        // "Yuri" at the bottom, with larger spacing
+        const text2 = "YURI";
+        const startY2 = canvas.height - 80;
+        const spacing = 100;
+        let startX2 = canvas.width;
+
+        textParticles = [];
+        for (let i = 0; i < text1.length; i++) {
+            const targetX = startX1 + i * 30;
+            const targetY = startY1;
+            textParticles.push(new TextParticle(
+                canvas.width / 2 + (Math.random() - 0.5) * 800,
+                canvas.height / 2 + (Math.random() - 0.5) * 600,
+                targetX,
+                targetY,
+                text1[i],
+                false
+            ));
+        }
+        for (let i = 0; i < text2.length; i++) {
+            const targetX = startX2 + i * spacing;
+            const targetY = startY2;
+            textParticles.push(new TextParticle(
+                canvas.width / 2 + (Math.random() - 0.5) * 800,
+                canvas.height / 2 + (Math.random() - 0.5) * 600,
+                targetX,
+                targetY,
+                text2[i],
+                true
+            ));
+        }
+    }
+
+    // 绘制中心大爱心
+    function drawBigHeart() {
+        ctx.globalAlpha = 0.9;
+        const gradient = ctx.createRadialGradient(
+            canvas.width / 2, canvas.height / 2 - 30, 15,
+            canvas.width / 2, canvas.height / 2 - 30, 70
+        );
+        gradient.addColorStop(0, '#ff99cc');
+        gradient.addColorStop(0.5, '#ff69b4');
+        gradient.addColorStop(1, '#ff5e78');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.moveTo(canvas.width / 2, canvas.height / 2 - 30);
+        ctx.bezierCurveTo(canvas.width / 2 - 30, canvas.height / 2 - 60, canvas.width / 2 - 60, canvas.height / 2, canvas.width / 2, canvas.height / 2 + 30);
+        ctx.bezierCurveTo(canvas.width / 2 + 60, canvas.height / 2, canvas.width / 2 + 30, canvas.height / 2 - 60, canvas.width / 2, canvas.height / 2 - 30);
+        ctx.fill();
+        ctx.globalAlpha = 0.4;
+        ctx.shadowBlur = 35;
+        ctx.shadowColor = '#ff69b4';
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+
+    // 动画循环
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBigHeart();
+        heartTrail.update();
+        heartTrail.draw();
+
+        hearts.forEach(heart => {
+            heart.update();
+            heart.draw();
+        });
+
+        sparks.forEach(spark => {
+            spark.update();
+            spark.draw();
+        });
+
+        glowLines.forEach(line => {
+            line.update();
+            line.draw();
+        });
+
+        if (textShown) {
+            textParticles.forEach(particle => {
+                particle.update();
+                particle.draw();
+            });
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+
+    // 交互：点击生成文字粒子和其他特效
+    canvas.addEventListener('click', (e) => {
+        if (!textShown) {
+            initTextParticles();
+            textShown = true;
+        }
+        for (let i = 0; i < 30; i++) {
+            sparks.push(new SparkParticle(e.x, e.y));
+        }
+        for (let i = 0; i < 5; i++) {
+            glowLines.push(new GlowLine());
+        }
+    });
+
+    // 自适应窗口大小
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        textParticles.forEach(particle => {
+            if (particle.isYuri) {
+                particle.targetY = canvas.height - 80;
+            }
+        });
+    });
+</script>
+</body>
+</html>
